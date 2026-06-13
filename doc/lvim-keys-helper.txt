@@ -1,0 +1,118 @@
+*lvim-keys-helper.txt*    A self-contained key-hint panel (which-key replacement)
+
+==============================================================================
+CONTENTS                                              *lvim-keys-helper*
+
+  1. Introduction ........................... |lvim-keys-helper-intro|
+  2. Setup .................................. |lvim-keys-helper-setup|
+  3. Panel keys ............................. |lvim-keys-helper-panel|
+  4. API .................................... |lvim-keys-helper-api|
+  5. Command ................................ |lvim-keys-helper-command|
+  6. Highlights ............................. |lvim-keys-helper-highlights|
+
+==============================================================================
+1. INTRODUCTION                                 *lvim-keys-helper-intro*
+
+Trigger keys are auto-detected per buffer: the first keystroke of every
+multi-key mapping (and, with presets on, of the built-in g/z/[/]/CTRL-W/text
+object sequences). Triggers are buffer-local <nowait> mappings, so they fire
+instantly — the panel wait is `delay` alone — while 'timeoutlen' itself is
+never touched: keys the helper does not intercept (`ignore`d prefixes, other
+modes) keep Vim's native timeout behaviour. The finished sequence is replayed
+so the real mapping (or native command) runs, preserving the typed count and
+register.
+
+A trigger that lands on a key with an existing buffer-local single-key
+mapping saves it and restores it when the trigger goes away; a global
+single-key mapping is never touched and runs via the ambiguity rule.
+
+==============================================================================
+2. SETUP                                        *lvim-keys-helper-setup*
+>lua
+  require("lvim-keys-helper").setup({
+      enabled = true,
+      delay = 200,                 -- ms of inactivity before the panel opens
+      style = "mini",              -- "mini" | "full"
+      trigger_modes = { "n", "x", "o" },
+      presets = true,              -- built-in g/z/[/]/<C-w>/text objects
+      groups = {                   -- labels for group rows
+          ["<leader>f"] = "Find",
+      },
+      ignore = {},                 -- sequences the helper never handles
+  })
+<
+A group value may be a table with: `color` (palette name), `mode` ("n" or
+{ "n", "x" }), `strict` (curated whitelist menu), `sticky` (hydra re-open),
+`delay` (ms override), and `keys` (per-child descriptions or full mapping
+definitions in vim.keymap.set syntax; a child may be a nested group). The
+panel control keys live in `keys` (back / scroll_down / scroll_up / run /
+help); usage sorting via `sort_by_usage`. See README.md for the full set.
+==============================================================================
+3. PANEL KEYS                                   *lvim-keys-helper-panel*
+
+While a sequence is being read (all keys configurable via `keys`):
+
+  <CR>          run the complete mapping behind the current prefix (shown in
+                the legend when the prefix is both a mapping and a group)
+  <BS>          step back one level (at the root: cancel)
+  <C-d> <C-u>   next / previous page when the panel overflows
+  <F1>          then a key: show the mapping behind it (desc, source, flags)
+  <Esc>         cancel (in operator-pending mode the operator is aborted too)
+
+Mouse (with 'mouse' enabled): click a row to press its key, a breadcrumb
+cell to jump back to that level, outside the panel to close.
+
+A `sticky = true` group re-opens its panel after a direct child runs
+(hydra-style) until <Esc>/back. After `"` the registers show their content;
+after `'` / ``` the marks show their target lines. Executed sequences are
+counted (see :LvimKeysHelper stats and `sort_by_usage`).
+
+An open panel never executes anything by timeout — the exact mapping behind
+a prefix runs only via <CR> (or Vim-style before the panel shows, when
+'timeoutlen' is shorter than the configured delay).
+
+==============================================================================
+4. API                                          *lvim-keys-helper-api*
+
+  setup({opts})                 Configure and start (idempotent).
+  enable() / disable()          Turn the panel on/off (live).
+  toggle()                      Toggle; returns the new state.
+  is_enabled()                  Whether the panel is enabled.
+  set_delay({ms}) / get_delay() Popup delay in milliseconds (live).
+  set_style({style})            "mini" | "full" (live).
+  toggle_style() / style()      Toggle / read the style.
+  register_groups({tbl})        Add group labels at runtime.
+  trigger_count()               Number of installed triggers.
+
+==============================================================================
+5. COMMAND                                      *:LvimKeysHelper*
+
+  :LvimKeysHelper               Show status.
+  :LvimKeysHelper toggle        Toggle on/off.
+  :LvimKeysHelper enable        Enable.
+  :LvimKeysHelper disable       Disable (restores shadowed maps).
+  :LvimKeysHelper style [s]     Set/toggle style ("mini"/"full").
+  :LvimKeysHelper delay [ms]    Set/show the popup delay.
+  :LvimKeysHelper doctor        Audit mappings (conflicts, missing descs,
+                                <Nop> placeholders, orphan group labels).
+  :LvimKeysHelper cheatsheet    Render the whole key tree into a buffer.
+  :LvimKeysHelper stats [N]     Show the N most used sequences (default 30).
+  :LvimKeysHelper stats reset   Clear the usage counters.
+  :LvimKeysHelper debug         Toggle the trace log.
+  :LvimKeysHelper log           Open the trace log.
+
+==============================================================================
+6. HIGHLIGHTS                                   *lvim-keys-helper-highlights*
+
+Built from the lvim-utils palette (per `tint` / `colors` config) and rebuilt
+on colorscheme change (N = `#palette`):
+
+  LvimKeysHelperNormal          Panel background
+  LvimKeysHelperBorder          Panel border
+  LvimKeysHelperBadge1..N       Key badges (and the title breadcrumb cells)
+  LvimKeysHelperText1..N        Description cells (and breadcrumb separators)
+  LvimKeysHelperGroup1..N       Description cells of group rows (italic)
+  LvimKeysHelperFooter          Legend labels in the bottom border
+  LvimKeysHelperFooterKey       Legend keys / the count cell in the title
+
+vim:tw=78:ts=8:noet:ft=help:norl:
