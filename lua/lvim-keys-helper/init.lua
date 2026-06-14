@@ -41,6 +41,7 @@ local registered = false ---@type boolean  one-time setup (autocmds, command) do
 local active = false ---@type boolean  inside an enter() loop (suppresses trigger recompute)
 local recompute_timer = nil ---@type uv.uv_timer_t|nil  debounce for buffer-change recompute
 local mutating = false ---@type boolean  inside our own trigger (un)install — the keymap watcher ignores those
+local relinquishing = false ---@type boolean  replaying a native operator+motion with triggers off (see resolve())
 
 local LOG_PATH = vim.fn.stdpath("state") .. "/lvim-keys-helper.log"
 
@@ -174,6 +175,9 @@ end
 --- key is saved before being shadowed and restored when the trigger goes away.
 ---@return nil
 local function install_triggers()
+    if relinquishing then
+        return -- a native operator+motion replay is in flight with triggers deliberately off
+    end
     mutating = true
     local ok, err = pcall(function()
         if not config.enabled then
@@ -289,12 +293,20 @@ local function run_map(map)
 end
 
 --- Run the resolved sequence `pending` in `mode`, with the captured count/register in
---- `prefix`. An existing mapping is replayed WITH remapping ("m"): resolve() is only
---- reached when no longer mapping continues past `pending`, so the full sequence is the
---- longest complete match and Vim runs it immediately — expr/callback/count/register/
---- dot-repeat all behave exactly as if typed, and our 1-key trigger can never win that
---- match. Everything native is replayed with NO remapping ("n"), so the trigger can't
---- re-fire. The triggers themselves are never touched, keeping their lifecycle trivial.
+--- `prefix`. resolve() is only reached when no longer mapping continues past `pending`, so
+--- it is the longest complete match. We replay it WITH remapping (so expr/callback/count/
+--- register/dot-repeat behave exactly as if typed) but FIRST take THIS buffer's triggers off
+--- — then reinstall them once the keys drain (SafeState, like arm_sticky()); `relinquishing`
+--- keeps any recompute from reinstalling them mid-drain. Removing the triggers is essential
+--- in two ways:
+---   • a `<nowait>` 1-key trigger would otherwise re-fire on the replay and shadow the very
+---     multi-key mapping we resolved — e.g. a GLOBAL `<C-c>.` behind the buffer-local
+---     `<C-c>` trigger, an infinite re-feed loop that hangs Neovim;
+---   • a NATIVE operator's motion can be a mapping (an operator-pending text object like
+---     `af`) — with the triggers gone, Vim's own longest-match resolves the whole
+---     operator+motion through the real mappings.
+--- The `shadowed` case (the sequence ended exactly on a trigger key) is the one exception:
+--- the real occupant is run directly.
 ---@param mode string
 ---@param pending string  raw bytes
 ---@param prefix string  count/register, raw typeable bytes
@@ -308,9 +320,24 @@ local function resolve(mode, pending, prefix)
         log("RESOLVE " .. vim.fn.keytrans(pending) .. " → shadowed")
         return run_map(saved)
     end
-    local mapped = keymaps.find(mode, pending) ~= nil
-    log("RESOLVE " .. vim.fn.keytrans(pending) .. " → " .. (mapped and "mapped" or "native"))
-    vim.api.nvim_feedkeys(prefix .. pending, mapped and "m" or "n", false)
+    log("RESOLVE " .. vim.fn.keytrans(pending) .. " → " .. (keymaps.find(mode, pending) and "mapped" or "native"))
+    local buf = vim.api.nvim_get_current_buf()
+    local prev = mutating
+    mutating = true
+    for _, t in ipairs(installed[buf] or {}) do
+        remove_trigger(buf, t)
+    end
+    installed[buf] = nil
+    mutating = prev
+    relinquishing = true
+    vim.api.nvim_feedkeys(prefix .. pending, "m", false)
+    local function rearm()
+        relinquishing = false
+        install_triggers()
+    end
+    if not pcall(vim.api.nvim_create_autocmd, "SafeState", { once = true, callback = rearm }) then
+        vim.defer_fn(rearm, 80)
+    end
 end
 
 --- Re-open the panel at `parent` (raw prefix) once the just-resolved action has fully
