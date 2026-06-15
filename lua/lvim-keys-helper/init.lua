@@ -191,8 +191,15 @@ local function install_triggers()
             end
         end
         local buf = vim.api.nvim_get_current_buf()
-        if vim.bo[buf].buftype == "prompt" then
-            return -- prompt buffers (pickers etc.) are insert-driven; never intercept there
+        local bt = vim.bo[buf].buftype
+        -- Only intercept normal editing buffers. Special buffers drive their OWN keys:
+        --   • prompt — insert-driven (pickers);
+        --   • nofile — scratch / UI panels (the package manager, control-center, file trees,
+        --     dashboards), whose rows bind single keys like r/u/d/b — a trigger would shadow them
+        --     and pop the helper instead. (`nvim_create_buf(_, true)` makes these nofile, set at
+        --     creation, before filetype/modifiable — so this is reliable and early.)
+        if bt == "prompt" or bt == "nofile" then
+            return
         end
         -- desired[mode][lhs_human] = raw_fk
         local desired = {}
