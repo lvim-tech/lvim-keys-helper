@@ -326,7 +326,7 @@ end
 ---   color  palette-name colour of this panel (a group's colour; default: nesting level)
 ---@param items table[]
 ---@param title string|string[]
----@param opts? { back?: boolean, exact?: string, color?: string, mode?: string }
+---@param opts? { back?: boolean, exact?: string, color?: string, mode?: string, count?: integer }
 ---@return nil
 function M.show(items, title, opts)
     if #items == 0 then
@@ -341,6 +341,19 @@ function M.show(items, title, opts)
     state.items, state.title, state.title_keys = items, tid, tkeys
     state.back, state.exact, state.color, state.mode = opts.back == true, opts.exact, opts.color, opts.mode
     state.count = opts.count
+    -- Re-lay-out on resize: row/col and the column budget all derive from `vim.o.lines`/`columns`,
+    -- so a re-render re-fits and repositions the panel. Installed while shown, torn down in hide().
+    if not state.resize_au then
+        state.resize_au = vim.api.nvim_create_augroup("LvimKeysHelperResize", { clear = true })
+        vim.api.nvim_create_autocmd("VimResized", {
+            group = state.resize_au,
+            callback = function()
+                if M.visible() then
+                    render()
+                end
+            end,
+        })
+    end
     render()
 end
 
@@ -377,6 +390,10 @@ function M.hide()
     state.items, state.title, state.title_keys, state.back, state.exact, state.color = nil, nil, nil, false, nil, nil
     state.count, state.geom, state.title_ranges = nil, nil, nil
     state.page, state.pages = 1, 1
+    if state.resize_au then
+        pcall(vim.api.nvim_del_augroup_by_id, state.resize_au)
+        state.resize_au = nil
+    end
 end
 
 --- Whether the panel is currently visible.
