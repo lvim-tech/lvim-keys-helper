@@ -32,6 +32,60 @@ Everything that matters is switchable **live, without a restart**:
 - **panel style** — `set_style("mini" | "full")` / `toggle_style()`
 - **group labels** — `register_groups({ ["<leader>f"] = "Find" })`
 
+[![License: BSD-3-Clause](https://img.shields.io/badge/License-BSD--3--Clause-blue.svg)](https://github.com/lvim-tech/lvim-keys-helper/blob/main/LICENSE)
+
+## Installation
+
+Requires only `lvim-utils` (palette / merge helpers).
+
+### LVIM IDE
+
+Ships with LVIM IDE. Override its options in your user module
+(`lua/modules/user/init.lua`):
+
+```lua
+modules["lvim-tech/lvim-keys-helper"] = {
+    dependencies = { "lvim-tech/lvim-utils" },
+    opts = { ... },
+}
+```
+
+### lazy.nvim
+
+```lua
+return {
+    "lvim-tech/lvim-keys-helper",
+    dependencies = { "lvim-tech/lvim-utils" },
+    config = function()
+        require("lvim-keys-helper").setup({})
+    end,
+}
+```
+
+### Native (vim.pack / packadd)
+
+```lua
+-- In your init.lua, after the plugin is on the runtimepath:
+vim.pack.add({
+    { src = "https://github.com/lvim-tech/lvim-utils" },
+    { src = "https://github.com/lvim-tech/lvim-keys-helper" },
+})
+
+require("lvim-keys-helper").setup({})
+```
+
+### packer.nvim
+
+```lua
+use({
+    "lvim-tech/lvim-keys-helper",
+    requires = { "lvim-tech/lvim-utils" },
+    config = function()
+        require("lvim-keys-helper").setup({})
+    end,
+})
+```
+
 ## Styles
 
 - **mini** — a compact window anchored to the bottom-right corner
