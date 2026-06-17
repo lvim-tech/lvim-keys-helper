@@ -607,6 +607,17 @@ end
 ---@return nil
 function enter(mode, pending)
     log("ENTER mode=" .. mode .. " lhs=" .. vim.fn.keytrans(pending) .. " enabled=" .. tostring(config.enabled))
+    -- A native sequence is being replayed by resolve() with the triggers taken off. resolve()
+    -- only removes the triggers of the buffer it ran in, but the replay can cross into another
+    -- window/buffer whose triggers are still live — e.g. `<C-W>w` switches windows, and the fed
+    -- `<C-W>` then re-fires this very trigger on the destination buffer. Re-entering run_loop here
+    -- would re-capture the fed key and feed the sequence again on every cycle: an infinite re-feed
+    -- loop that hangs Neovim. While `relinquishing`, stay out of the way — replay the key natively
+    -- (noremap so it can't be re-captured, inserted AHEAD of the pending remainder) and return.
+    if relinquishing then
+        log("  relinquishing → replay native, skip")
+        return vim.api.nvim_feedkeys(pending, "ni", false)
+    end
     if not config.enabled then
         return vim.api.nvim_feedkeys(pending, "n", false)
     end
