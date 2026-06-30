@@ -175,7 +175,7 @@ require("lvim-keys-helper").setup({
     palette = { "blue", "green", "red", "purple", "cyan", "orange", "yellow", "magenta", "teal" },
     -- accent colours cycled per nesting level
     win = {
-        border = { " ", " ", " ", " ", " ", " ", " ", " " },
+        -- ring follows the single border source, `lvim-utils.config.ui.border` (no per-plugin literal)
         max_height = 0.45, -- fraction of editor height
         mini = { max_width = 60, margin = 1 },
         full = { margin = 0 },

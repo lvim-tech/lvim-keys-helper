@@ -114,7 +114,9 @@ return {
         accent = "blue",
     },
     win = {
-        border = { " ", " ", " ", " ", " ", " ", " ", " " },
+        -- The cheatsheet's ring follows the SINGLE border source, `lvim-utils.config.ui.border` (resolved live
+        -- by `ui.frame_border()`), so it re-borders in lockstep with every other lvim-tech panel — no per-plugin
+        -- border literal here.
         max_height = 0.45, -- fraction of editor height
         mini = {
             max_width = 60, -- columns

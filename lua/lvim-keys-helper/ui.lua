@@ -19,6 +19,28 @@ local M = {}
 local NS = vim.api.nvim_create_namespace("lvim_keys_helper")
 local state = { buf = nil, win = nil, items = nil, title = nil, page = 1, pages = 1 }
 
+--- The shared frame border — `lvim-utils.config.ui.border`, the ONE source every lvim-tech panel follows, so
+--- the cheatsheet re-borders in lockstep with the rest of the UI from that single key. The cheatsheet itself
+--- stays a bespoke, NON-focusable float (it must never steal focus — the user keeps typing into their real
+--- buffer while it updates reactively, and it is repainted via an explicit `redraw` under the host's
+--- `getcharstr` block — neither of which a chassis panel with navigable footer sectors can do), so it points
+--- at the border source rather than migrating onto `surface.open`. The config value is the chassis' PADDED
+--- representation (empty corners between " " edges), which `nvim_open_win` rejects directly — so it is run
+--- through `lvim-utils.ui.util.resolve_border` (the same normalizer the chassis uses: it fills each empty
+--- corner that sits between two non-empty edges). Falls back to the canonical full " " ring when lvim-utils is
+--- absent.
+---@return string|string[]
+local function frame_border()
+    local ok, uconf = pcall(require, "lvim-utils.config")
+    if ok and uconf.ui and uconf.ui.border then
+        local ok_util, util = pcall(require, "lvim-utils.ui.util")
+        if ok_util then
+            return util.resolve_border(uconf.ui.border)
+        end
+    end
+    return { " ", " ", " ", " ", " ", " ", " ", " " }
+end
+
 --- Truncate `s` to `w` display cells, adding an ellipsis when it overflows.
 ---@param s string
 ---@param w integer
@@ -292,7 +314,7 @@ local function render()
         width = width,
         height = height,
         style = "minimal",
-        border = win_cfg.border,
+        border = frame_border(),
         focusable = false,
         noautocmd = true,
         zindex = win_cfg.zindex,
