@@ -31,14 +31,13 @@ local state = { buf = nil, win = nil, items = nil, title = nil, page = 1, pages 
 --- absent.
 ---@return string|string[]
 local function frame_border()
-    local ok, uconf = pcall(require, "lvim-utils.config")
-    if ok and uconf.ui and uconf.ui.border then
-        local ok_util, util = pcall(require, "lvim-utils.ui.util")
-        if ok_util then
-            return util.resolve_border(uconf.ui.border)
-        end
+    local ok, util = pcall(require, "lvim-utils.ui.util")
+    if ok and util.chrome_border then
+        -- chrome_border follows config.ui.border but returns an INVISIBLE padding ring when it is "none", so the
+        -- cheatsheet's breadcrumb TITLE + legend FOOTER (which ride the border) keep rendering on a borderless UI.
+        return util.chrome_border()
     end
-    return { " ", " ", " ", " ", " ", " ", " ", " " }
+    return { " ", " ", " ", " ", " ", " ", " ", " " } -- standalone fallback (lvim-utils absent)
 end
 
 --- Truncate `s` to `w` display cells, adding an ellipsis when it overflows.
