@@ -98,6 +98,7 @@ a prefix runs only via <CR> (or Vim-style before the panel shows, when
   :LvimKeysHelper cheatsheet    Render the whole key tree into a buffer.
   :LvimKeysHelper stats [N]     Show the N most used sequences (default 30).
   :LvimKeysHelper stats reset   Clear the usage counters.
+  :LvimKeysHelper test          Show a fixed sample panel (preview).
   :LvimKeysHelper debug         Toggle the trace log.
   :LvimKeysHelper log           Open the trace log.
 

@@ -140,7 +140,7 @@ return {
     },
     icons = {
         group = "", -- appended to a key that is itself a prefix (more keys follow)
-        breadcrumb = "", -- between the keys of the pending sequence in the title
+        breadcrumb = "➤", -- between the keys of the pending sequence in the title
     },
     -- Accent colours (lvim-utils palette names) cycled per NESTING LEVEL: a 1st-level
     -- panel (e.g. <Space>) uses palette[1], its submenus palette[2], and so on. Every

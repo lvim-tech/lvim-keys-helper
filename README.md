@@ -36,19 +36,17 @@ Everything that matters is switchable **live, without a restart**:
 
 ## Installation
 
-Requires only `lvim-utils` (palette / merge helpers).
+Requires Neovim >= 0.10 and [lvim-utils](https://github.com/lvim-tech/lvim-utils) (palette / merge helpers).
 
-### LVIM IDE
+### lvim-installer (recommended)
 
-Ships with LVIM IDE. Override its options in your user module
-(`lua/modules/user/init.lua`):
+Install and manage it from the LVIM package manager — open the **Plugins** tab and install / update / pin it:
 
-```lua
-modules["lvim-tech/lvim-keys-helper"] = {
-    dependencies = { "lvim-tech/lvim-utils" },
-    opts = { ... },
-}
+```vim
+:LvimInstaller plugins
 ```
+
+lvim-installer installs plugins through Neovim's built-in `vim.pack`, so no external plugin manager is needed.
 
 ### lazy.nvim
 
@@ -62,18 +60,6 @@ return {
 }
 ```
 
-### Native (vim.pack / packadd)
-
-```lua
--- In your init.lua, after the plugin is on the runtimepath:
-vim.pack.add({
-    { src = "https://github.com/lvim-tech/lvim-utils" },
-    { src = "https://github.com/lvim-tech/lvim-keys-helper" },
-})
-
-require("lvim-keys-helper").setup({})
-```
-
 ### packer.nvim
 
 ```lua
@@ -84,6 +70,16 @@ use({
         require("lvim-keys-helper").setup({})
     end,
 })
+```
+
+### Native (vim.pack)
+
+```lua
+vim.pack.add({
+    { src = "https://github.com/lvim-tech/lvim-utils" },
+    { src = "https://github.com/lvim-tech/lvim-keys-helper" },
+})
+require("lvim-keys-helper").setup({})
 ```
 
 ## Styles
@@ -194,7 +190,7 @@ require("lvim-keys-helper").setup({
     },
     icons = {
         group = "", -- appended to group keys
-        breadcrumb = "", -- between the title cells
+        breadcrumb = "➤", -- between the title cells
     },
     recompute_debounce = 120, -- ms the buffer-change trigger recompute is debounced
 })
