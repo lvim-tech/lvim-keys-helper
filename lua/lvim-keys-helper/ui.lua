@@ -329,8 +329,10 @@ local function render()
         vim.api.nvim_win_set_config(state.win, opts)
     else
         state.win = vim.api.nvim_open_win(state.buf, false, opts)
-        vim.wo[state.win].winhighlight =
-            "Normal:LvimKeysHelperNormal,FloatBorder:LvimKeysHelperBorder,FloatTitle:LvimKeysHelperTitle"
+        -- No FloatTitle remap: the native border title is built entirely from explicit
+        -- per-chunk groups (BadgeN/TextN/FooterKey/Border — see render()), so FloatTitle is
+        -- never consulted. Remapping it to an undefined group would be a dangling no-op.
+        vim.wo[state.win].winhighlight = "Normal:LvimKeysHelperNormal,FloatBorder:LvimKeysHelperBorder"
         vim.wo[state.win].winblend = win_cfg.winblend
         vim.wo[state.win].wrap = false -- never wrap a cell onto a 2nd line under the key
     end

@@ -11,6 +11,12 @@ local stats = require("lvim-keys-helper.stats")
 
 local M = {}
 
+-- Raw byte prefixes of <Plug> / <SNR> maps (script-internal keymaps the doctor skips).
+-- Hoisted as module locals — recomputing them per map inside maps_of() would just repeat
+-- the same termcode translation on every iteration (see keymaps.lua for the same pair).
+local PLUG = vim.api.nvim_replace_termcodes("<Plug>", true, true, true)
+local SNR = vim.api.nvim_replace_termcodes("<SNR>", true, true, true)
+
 --- Open `lines` in a new markdown scratch buffer (one per call).
 ---@param title string
 ---@param lines string[]
@@ -38,9 +44,7 @@ local function maps_of(mode)
             if lhs and lhs ~= "" and m.desc ~= keymaps.TRIGGER_DESC then
                 local canon = keymaps.canon(lhs)
                 local head = canon:sub(1, 3)
-                local plug = vim.api.nvim_replace_termcodes("<Plug>", true, true, true)
-                local snr = vim.api.nvim_replace_termcodes("<SNR>", true, true, true)
-                if head ~= plug and head ~= snr then
+                if head ~= PLUG and head ~= SNR then
                     out[#out + 1] = { raw = canon, map = m, buffer = buffer }
                 end
             end

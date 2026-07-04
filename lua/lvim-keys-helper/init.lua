@@ -883,6 +883,14 @@ function M.setup(opts)
     -- Watch mapping changes: plugins that define maps OUTSIDE the BufEnter cycle (timers,
     -- user commands, lazy handlers) become triggers/panel rows immediately instead of
     -- after the next buffer switch. Our own trigger churn is ignored via `mutating`.
+    --
+    -- The vim.keymap.set/del override is installed ONCE (guarded by `registered`) and is
+    -- intentionally PERMANENT — disable() never tears it down. That is by design: the
+    -- watcher must keep the cache/triggers coherent across enable/disable cycles, and while
+    -- disabled it is inert anyway (queue_recompute honours config.enabled, and TRIGGER_DESC
+    -- sets are filtered), so there is nothing to gain from unwrapping it. Unwrapping would
+    -- also be unsafe: a later plugin may have wrapped our wrapper, so restoring orig_set
+    -- would silently drop the intervening layer. Leave the seam in place.
     if config.watch_mappings ~= false then
         local orig_set, orig_del = vim.keymap.set, vim.keymap.del
         ---@diagnostic disable-next-line: duplicate-set-field

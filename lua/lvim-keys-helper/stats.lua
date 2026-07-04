@@ -40,6 +40,14 @@ local function sqlite()
     return db
 end
 
+--- Which persistence backend is live: "sqlite" when sqlite.lua opened successfully,
+--- else the "json" fallback (a plain file in stdpath("state")). Probes the same lazy
+--- connection the read/write paths use, so :checkhealth reports the real backend.
+---@return "sqlite"|"json"
+function M.backend()
+    return sqlite() and "sqlite" or "json"
+end
+
 --- Load the persisted counts (once) into the in-memory table.
 ---@return table<string, integer>
 local function load()
@@ -96,6 +104,18 @@ function M.save()
     has_dirty = false
 end
 
+--- Stop and close the debounce timer, releasing its libuv handle. Idempotent.
+---@return nil
+local function close_timer()
+    if save_timer then
+        if not save_timer:is_closing() then
+            save_timer:stop()
+            save_timer:close()
+        end
+        save_timer = nil
+    end
+end
+
 --- Record one execution of `seq` (display form) in `mode`.
 ---@param mode string
 ---@param seq string
@@ -108,7 +128,14 @@ function M.bump(mode, seq)
     has_dirty = true
     if not hooked then
         hooked = true
-        vim.api.nvim_create_autocmd("VimLeavePre", { callback = M.save })
+        -- Final flush AND handle cleanup on exit: without close() the debounce timer would
+        -- leak one libuv handle for the rest of the session (it is created once and reused).
+        vim.api.nvim_create_autocmd("VimLeavePre", {
+            callback = function()
+                M.save()
+                close_timer()
+            end,
+        })
     end
     -- debounce: one flush at most every 5s of activity
     if save_timer then
@@ -155,6 +182,8 @@ function M.reset()
     data = {}
     dirty = {}
     has_dirty = false
+    -- Drop any pending debounced flush (and its handle); nothing left to write.
+    close_timer()
     local d = sqlite()
     if d then
         pcall(d.eval, d, "DELETE FROM stats")

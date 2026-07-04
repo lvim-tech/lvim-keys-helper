@@ -85,7 +85,7 @@ a prefix runs only via <CR> (or Vim-style before the panel shows, when
   trigger_count()               Number of installed triggers.
 
 ==============================================================================
-5. COMMAND                                      *:LvimKeysHelper*
+5. COMMAND                *lvim-keys-helper-command* *:LvimKeysHelper*
 
   :LvimKeysHelper               Show status.
   :LvimKeysHelper toggle        Toggle on/off.
