@@ -26,12 +26,12 @@ local state = { buf = nil, win = nil, items = nil, title = nil, page = 1, pages 
 --- `getcharstr` block — neither of which a chassis panel with navigable footer sectors can do), so it points
 --- at the border source rather than migrating onto `surface.open`. The config value is the chassis' PADDED
 --- representation (empty corners between " " edges), which `nvim_open_win` rejects directly — so it is run
---- through `lvim-utils.ui.util.resolve_border` (the same normalizer the chassis uses: it fills each empty
+--- through `lvim-ui.util.resolve_border` (the same normalizer the chassis uses: it fills each empty
 --- corner that sits between two non-empty edges). Falls back to the canonical full " " ring when lvim-utils is
 --- absent.
 ---@return string|string[]
 local function frame_border()
-    local ok, util = pcall(require, "lvim-utils.ui.util")
+    local ok, util = pcall(require, "lvim-ui.util")
     if ok and util.chrome_border then
         -- chrome_border follows config.ui.border but returns an INVISIBLE padding ring when it is "none", so the
         -- cheatsheet's breadcrumb TITLE + legend FOOTER (which ride the border) keep rendering on a borderless UI.
