@@ -93,10 +93,16 @@ function M.save()
     else
         local ok, encoded = pcall(vim.json.encode, data)
         if ok then
-            local f = io.open(JSON_PATH, "w")
+            -- Atomic replace: write a sibling temp file, then rename it over the target.
+            -- io.open(path, "w") truncates first, so a crash (or a second instance flushing
+            -- at VimLeavePre) mid-write would leave a corrupt file that load() silently reads
+            -- as empty, making the loss permanent. os.rename is atomic on the same filesystem.
+            local tmp = JSON_PATH .. ".tmp"
+            local f = io.open(tmp, "w")
             if f then
                 f:write(encoded)
                 f:close()
+                os.rename(tmp, JSON_PATH)
             end
         end
     end
@@ -137,13 +143,17 @@ function M.bump(mode, seq)
             end,
         })
     end
-    -- debounce: one flush at most every 5s of activity
-    if save_timer then
-        save_timer:stop()
-    else
+    -- Throttle: one flush per 5s of activity. Starting the timer only when it is NOT already
+    -- pending makes it fire 5s after the FIRST bump of a burst (a leading-window throttle),
+    -- so an actively-typed session still persists every 5s. A trailing debounce (restart on
+    -- every bump) would defer the write indefinitely under steady use — only VimLeavePre would
+    -- ever flush, and a crash would lose the whole session's counts.
+    if not save_timer then
         save_timer = vim.uv.new_timer()
     end
-    save_timer:start(5000, 0, vim.schedule_wrap(M.save))
+    if not save_timer:is_active() then
+        save_timer:start(5000, 0, vim.schedule_wrap(M.save))
+    end
 end
 
 --- The recorded count for `seq` in `mode` (in-memory read).

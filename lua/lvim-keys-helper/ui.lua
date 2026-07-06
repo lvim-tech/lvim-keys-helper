@@ -40,7 +40,9 @@ local function frame_border()
     return { " ", " ", " ", " ", " ", " ", " ", " " } -- standalone fallback (lvim-utils absent)
 end
 
---- Truncate `s` to `w` display cells, adding an ellipsis when it overflows.
+--- Truncate `s` to `w` DISPLAY cells, adding an ellipsis when it overflows. Shrinks by whole
+--- characters measured in cells (not char count) so wide glyphs never overrun the column —
+--- strcharpart's length argument counts characters, which a CJK/emoji desc would blow past.
 ---@param s string
 ---@param w integer
 ---@return string
@@ -48,7 +50,16 @@ local function fit(s, w)
     if vim.fn.strdisplaywidth(s) <= w then
         return s
     end
-    return vim.fn.strcharpart(s, 0, math.max(0, w - 1)) .. "\xe2\x80\xa6"
+    if w <= 1 then
+        return "\xe2\x80\xa6"
+    end
+    for n = vim.fn.strchars(s) - 1, 0, -1 do
+        local cut = vim.fn.strcharpart(s, 0, n)
+        if vim.fn.strdisplaywidth(cut) <= w - 1 then -- reserve one cell for the ellipsis
+            return cut .. "\xe2\x80\xa6"
+        end
+    end
+    return "\xe2\x80\xa6"
 end
 
 --- The palette slot (1..#palette) for a colour name; `fallback` when unknown.
@@ -258,13 +269,15 @@ local function render()
             local thl = p[3] and ("LvimKeysHelperText" .. p[3]) or "LvimKeysHelperFooter"
             footer[#footer + 1] = { " " .. p[1] .. " ", khl }
             footer[#footer + 1] = { " " .. p[2] .. " ", thl }
-            footer_w = footer_w + #p[1] + #p[2] + 4
+            -- display cells, not byte length: a Cyrillic/CJK label is multibyte and would
+            -- otherwise inflate footer_w (hence the whole panel width) past what it draws.
+            footer_w = footer_w + vim.fn.strdisplaywidth(p[1]) + vim.fn.strdisplaywidth(p[2]) + 4
         end
         if pages > 1 then
             local ind = " " .. page .. "/" .. pages .. " "
             footer[#footer + 1] = { "  ", "LvimKeysHelperBorder" }
             footer[#footer + 1] = { ind, "LvimKeysHelperFooter" }
-            footer_w = footer_w + 2 + #ind
+            footer_w = footer_w + 2 + vim.fn.strdisplaywidth(ind)
         end
     end
     content_w = math.max(content_w, footer_w)
@@ -295,7 +308,10 @@ local function render()
 
     if not (state.buf and vim.api.nvim_buf_is_valid(state.buf)) then
         state.buf = vim.api.nvim_create_buf(false, true)
-        vim.bo[state.buf].bufhidden = "wipe"
+        -- "hide" (not "wipe"): the buffer must SURVIVE window close so the next show reuses it
+        -- (see M.hide's "kept for reuse" and the valid-check above) — "wipe" destroyed it on
+        -- every close, recreating it each show. Dropped explicitly in M.teardown().
+        vim.bo[state.buf].bufhidden = "hide"
     end
     vim.api.nvim_buf_set_lines(state.buf, 0, -1, false, lines)
     vim.api.nvim_buf_clear_namespace(state.buf, NS, 0, -1)
@@ -417,6 +433,18 @@ function M.hide()
         pcall(vim.api.nvim_del_augroup_by_id, state.resize_au)
         state.resize_au = nil
     end
+end
+
+--- Drop the reused panel buffer (called when the helper is disabled / torn down). Because
+--- the buffer is now bufhidden="hide" it persists across show/hide for reuse, so it is
+--- deleted explicitly here instead of being wiped on every close.
+---@return nil
+function M.teardown()
+    M.hide()
+    if state.buf and vim.api.nvim_buf_is_valid(state.buf) then
+        pcall(vim.api.nvim_buf_delete, state.buf, { force = true })
+    end
+    state.buf = nil
 end
 
 --- Whether the panel is currently visible.

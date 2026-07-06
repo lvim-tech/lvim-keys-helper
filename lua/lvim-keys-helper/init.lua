@@ -40,6 +40,7 @@ local installed = {} ---@type table<integer, table[]>  bufnr → { mode, lhs, ra
 local registered = false ---@type boolean  one-time setup (autocmds, command) done
 local active = false ---@type boolean  inside an enter() loop (suppresses trigger recompute)
 local recompute_timer = nil ---@type uv.uv_timer_t|nil  debounce for buffer-change recompute
+local pending_recompute = false ---@type boolean  a recompute deferred because a sequence was active
 local mutating = false ---@type boolean  inside our own trigger (un)install — the keymap watcher ignores those
 local relinquishing = false ---@type boolean  replaying a native operator+motion with triggers off (see resolve())
 
@@ -95,17 +96,52 @@ local function restore_map(buf, mode, map)
     pcall(vim.api.nvim_buf_set_keymap, buf, mode, map.lhs, map.rhs or "", opts)
 end
 
+--- Index a buffer's keymaps by their canonical raw lhs, once per mode. Trigger install /
+--- removal then look an occupant up in O(1) instead of scanning the whole keymap list per
+--- key (buflocal_map_at, called once per trigger, is O(triggers × maps) — and resolve()
+--- paid that on every executed sequence). One index per pass amortises it to O(maps).
+---@param buf integer
+---@param modes string[]
+---@return table<string, table<string, table>>  mode → raw lhs → map dict
+local function map_index(buf, modes)
+    local idx = {}
+    for _, mode in ipairs(modes) do
+        local by_raw = {}
+        for _, map in ipairs(vim.api.nvim_buf_get_keymap(buf, mode)) do
+            by_raw[map.lhsraw or map.lhs] = map
+        end
+        idx[mode] = by_raw
+    end
+    return idx
+end
+
+--- The distinct modes present in a trigger list (so map_index only fetches those).
+---@param list table[]|nil
+---@return string[]
+local function list_modes(list)
+    local seen, modes = {}, {}
+    for _, t in ipairs(list or {}) do
+        if not seen[t.mode] then
+            seen[t.mode] = true
+            modes[#modes + 1] = t.mode
+        end
+    end
+    return modes
+end
+
 --- Delete the trigger `t` from buffer `buf` and restore the buffer-local mapping it
 --- shadowed — but only when the current occupant is still our trigger (a plugin may have
---- overwritten it since; never clobber).
+--- overwritten it since; never clobber). `idx` is a map_index of `buf` for O(1) occupant
+--- lookup; falls back to a per-call scan when it is absent.
 ---@param buf integer
 ---@param t table  an `installed[buf]` entry
+---@param idx? table<string, table<string, table>>
 ---@return nil
-local function remove_trigger(buf, t)
+local function remove_trigger(buf, t, idx)
     if not vim.api.nvim_buf_is_valid(buf) then
         return
     end
-    local cur = buflocal_map_at(buf, t.mode, t.raw)
+    local cur = (idx and idx[t.mode] and idx[t.mode][t.raw]) or buflocal_map_at(buf, t.mode, t.raw)
     if cur and cur.desc == keymaps.TRIGGER_DESC then
         pcall(vim.keymap.del, t.mode, t.lhs, { buffer = buf })
         if t.saved then
@@ -121,8 +157,11 @@ local function remove_triggers()
     local prev = mutating
     mutating = true
     for buf, list in pairs(installed) do
-        for _, t in ipairs(list) do
-            remove_trigger(buf, t)
+        if vim.api.nvim_buf_is_valid(buf) then
+            local idx = map_index(buf, list_modes(list))
+            for _, t in ipairs(list) do
+                remove_trigger(buf, t, idx)
+            end
         end
     end
     installed = {}
@@ -209,6 +248,11 @@ local function install_triggers()
                 desired[mode][vim.fn.keytrans(fk)] = fk
             end
         end
+        -- One keymap index for the whole pass. The drop loop and the add loop touch DISJOINT
+        -- keys (dropped = installed-but-unwanted, added = wanted-but-not-already-a-trigger), so
+        -- the drop loop's del/restore never changes an add key's occupant — the pre-pass index
+        -- stays valid for the add-loop lookups.
+        local idx = map_index(buf, config.trigger_modes or {})
         local changed = false
         -- drop triggers that are no longer wanted
         local kept = {}
@@ -217,14 +261,15 @@ local function install_triggers()
                 kept[#kept + 1] = t
                 desired[t.mode][t.lhs] = nil -- already mapped → don't re-add
             else
-                remove_trigger(buf, t)
+                remove_trigger(buf, t, idx)
                 changed = true
             end
         end
         -- add the newly wanted ones (saving whatever buffer-local map they shadow)
         for mode, lhss in pairs(desired) do
             for lhs, fk in pairs(lhss) do
-                local saved = buflocal_map_at(buf, mode, fk)
+                ---@type table|nil
+                local saved = (idx[mode] and idx[mode][fk]) or buflocal_map_at(buf, mode, fk)
                 if saved and saved.desc == keymaps.TRIGGER_DESC then
                     saved = nil -- a stale trigger of ours, never "restore" it
                 end
@@ -254,14 +299,25 @@ local function queue_recompute()
     if not config.enabled then
         return
     end
-    if recompute_timer then
-        recompute_timer:stop()
+    -- One persistent module timer, restarted on each event (defer_fn's timers self-close
+    -- INSIDE their callback, so :stop()ing a superseded one would leak its handle until GC).
+    -- Closed on VimLeavePre (see setup). A recompute that lands mid-sequence is deferred via
+    -- pending_recompute and rerun at the end of enter(), never dropped.
+    if not recompute_timer then
+        recompute_timer = vim.uv.new_timer()
     end
-    recompute_timer = vim.defer_fn(function()
-        if not active then
-            install_triggers()
-        end
-    end, config.recompute_debounce or 120)
+    recompute_timer:stop()
+    recompute_timer:start(
+        config.recompute_debounce or 120,
+        0,
+        vim.schedule_wrap(function()
+            if active then
+                pending_recompute = true
+            else
+                install_triggers()
+            end
+        end)
+    )
 end
 
 --- Execute a mapping dict directly. Used when a sequence times out on an exact mapping
@@ -275,7 +331,9 @@ local function run_map(map)
     end
     if map.callback then
         local ok, res = pcall(map.callback)
-        if ok and map.expr == 1 and type(res) == "string" and res ~= "" then
+        if not ok then
+            vim.notify(tostring(res), vim.log.levels.ERROR, { title = "keys-helper" })
+        elseif map.expr == 1 and type(res) == "string" and res ~= "" then
             local keys = res
             if map.replace_keycodes == 1 then
                 keys = vim.api.nvim_replace_termcodes(res, true, true, true)
@@ -290,7 +348,11 @@ local function run_map(map)
     end
     if map.expr == 1 then
         local ok, res = pcall(vim.api.nvim_eval, rhs)
-        if not ok or type(res) ~= "string" or res == "" then
+        if not ok then
+            vim.notify(tostring(res), vim.log.levels.ERROR, { title = "keys-helper" })
+            return
+        end
+        if type(res) ~= "string" or res == "" then
             return
         end
         rhs = res
@@ -331,8 +393,10 @@ local function resolve(mode, pending, prefix)
     local buf = vim.api.nvim_get_current_buf()
     local prev = mutating
     mutating = true
-    for _, t in ipairs(installed[buf] or {}) do
-        remove_trigger(buf, t)
+    local list = installed[buf] or {}
+    local idx = map_index(buf, list_modes(list))
+    for _, t in ipairs(list) do
+        remove_trigger(buf, t, idx)
     end
     installed[buf] = nil
     mutating = prev
@@ -500,12 +564,11 @@ local function run_loop(mode, first, prefix)
         end
         ch = keymaps.canon(ch) -- typed keys must match the canonical encoding of the maps
         local disp = vim.fn.keytrans(ch)
-        if
-            disp == key_run
-            and exact
-            and #keymaps.continuations(mode, pending .. ch) == 0
-            and not keymaps.find(mode, pending .. ch)
-        then
+        -- A panel control key (<CR>/<BS>/<C-d>/<C-u>/<F1>) only acts as one when the key is
+        -- NOT itself a real continuation or exact mapping of the current prefix — otherwise a
+        -- mapping that genuinely uses e.g. <BS>/<C-d> as its next keystroke would be shadowed.
+        local continues = #keymaps.continuations(mode, pending .. ch) > 0 or keymaps.find(mode, pending .. ch) ~= nil
+        if disp == key_run and exact and not continues then
             -- run the exact mapping behind this prefix (a real continuation wins)
             ui.hide()
             log("  run → exact " .. title)
@@ -516,14 +579,14 @@ local function run_loop(mode, first, prefix)
                 arm_sticky(mode, sticky)
             end
             return
-        elseif disp == key_back then
+        elseif disp == key_back and not continues then
             keys[#keys] = nil -- step back one level; at the root this cancels
             if #keys == 0 then
                 break
             end
-        elseif (disp == key_down or disp == key_up) and ui.can_scroll() then
+        elseif (disp == key_down or disp == key_up) and not continues and ui.can_scroll() then
             ui.scroll(disp == key_down and 1 or -1)
-        elseif disp == key_help then
+        elseif disp == key_help and not continues then
             -- describe the mapping behind the NEXT pressed key (and where it comes from)
             local ok2, hk = pcall(vim.fn.getcharstr)
             if ok2 and hk and hk ~= "" and hk ~= ESC then
@@ -580,7 +643,7 @@ local function run_loop(mode, first, prefix)
             -- mapping, treat it the way Neovim treats an unmapped meta key natively:
             -- ESC (cancel the panel) + the bare key, replayed as if typed afterwards.
             local alt = disp:match("^<M%-(.+)>$")
-            if alt and #keymaps.continuations(mode, pending .. ch) == 0 and not keymaps.find(mode, pending .. ch) then
+            if alt and not continues then
                 replay = #alt == 1 and alt or vim.api.nvim_replace_termcodes("<" .. alt .. ">", true, true, true)
                 log("  fused ESC+" .. alt .. " → cancel + replay")
                 break
@@ -636,10 +699,23 @@ function enter(mode, pending)
     end
     if mode == "o" and vim.v.operator and vim.v.operator ~= "" then
         prefix = prefix .. vim.v.operator
+        -- carry the forced-motion submode (dv…/dV…/d<C-v>…): mode(1) is "no"/"nov"/"noV"/
+        -- "no<C-v>" in operator-pending, so :sub(3) is "" or the forcing char. Fed right after
+        -- the operator, before the motion, so `dvj` / `dV{motion}` force survive the replay.
+        local forced = vim.fn.mode(1):sub(3)
+        if forced ~= "" then
+            prefix = prefix .. forced
+        end
     end
     active = true
     local ok_run, err = pcall(run_loop, mode, pending, prefix)
     active = false
+    -- a buffer-change recompute that fired mid-sequence was deferred (couldn't churn the
+    -- triggers while reading keys) — run it now that the sequence has ended.
+    if pending_recompute then
+        pending_recompute = false
+        install_triggers()
+    end
     if not ok_run then
         log("ENTER error: " .. tostring(err))
         ui.hide()
@@ -886,6 +962,18 @@ function M.setup(opts)
         group = grp,
         callback = set_highlights,
     })
+    -- Release the persistent recompute timer's libuv handle on exit (created once in
+    -- queue_recompute and reused — the same shape as stats.save_timer).
+    vim.api.nvim_create_autocmd("VimLeavePre", {
+        group = grp,
+        callback = function()
+            if recompute_timer and not recompute_timer:is_closing() then
+                recompute_timer:stop()
+                recompute_timer:close()
+                recompute_timer = nil
+            end
+        end,
+    })
     -- Watch mapping changes: plugins that define maps OUTSIDE the BufEnter cycle (timers,
     -- user commands, lazy handlers) become triggers/panel rows immediately instead of
     -- after the next buffer switch. Our own trigger churn is ignored via `mutating`.
@@ -934,7 +1022,7 @@ end
 function M.disable()
     config.enabled = false
     remove_triggers()
-    ui.hide()
+    ui.teardown()
 end
 
 --- Toggle enabled state; returns the new state.

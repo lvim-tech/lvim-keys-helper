@@ -17,19 +17,32 @@ local M = {}
 local PLUG = vim.api.nvim_replace_termcodes("<Plug>", true, true, true)
 local SNR = vim.api.nvim_replace_termcodes("<SNR>", true, true, true)
 
---- Open `lines` in a new markdown scratch buffer (one per call).
+--- Render `lines` into the ONE canonical markdown scratch buffer named `title`, reusing it
+--- across runs. A fresh buffer per call keeps a constant `nvim_buf_set_name`, so a rerun while
+--- the previous report is still visible would throw E95 (buffer name already in use) and abort
+--- the command; reusing the existing buffer replaces its contents instead.
 ---@param title string
 ---@param lines string[]
 ---@return nil
 local function scratch(title, lines)
-    local buf = vim.api.nvim_create_buf(false, true)
+    local existing = vim.fn.bufnr("^" .. title .. "$")
+    local buf = existing ~= -1 and existing or vim.api.nvim_create_buf(false, true)
+    vim.bo[buf].modifiable = true
     vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
     vim.bo[buf].modifiable = false
     vim.bo[buf].bufhidden = "wipe"
     vim.bo[buf].filetype = "markdown"
-    vim.api.nvim_buf_set_name(buf, title)
-    vim.cmd("botright split")
-    vim.api.nvim_win_set_buf(0, buf)
+    if existing == -1 then
+        vim.api.nvim_buf_set_name(buf, title)
+    end
+    -- focus the window already showing it, else open one
+    local win = vim.fn.bufwinid(buf)
+    if win ~= -1 then
+        vim.api.nvim_set_current_win(win)
+    else
+        vim.cmd("botright split")
+        vim.api.nvim_win_set_buf(0, buf)
+    end
 end
 
 --- All maps of `mode` (buffer-local + global), raw lhs canonicalized, triggers and

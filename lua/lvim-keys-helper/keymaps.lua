@@ -366,7 +366,9 @@ function M.continuations(mode, pending)
                     local r = regs:sub(i, i)
                     local ok, content = pcall(vim.fn.getreg, r)
                     if ok and type(content) == "string" and content ~= "" then
-                        add(r, (content:gsub("%s+", " "):gsub("^%s", "")))
+                        -- bound the normalize cost: only the head is ever shown (fit() clips it
+                        -- to desc_max cells), so a multi-megabyte register never gets regex-scanned
+                        add(r, (content:sub(1, 200):gsub("%s+", " "):gsub("^%s", "")))
                     end
                 end
             elseif pending == "'" or pending == "`" then
@@ -392,19 +394,25 @@ function M.continuations(mode, pending)
     -- typed — it is merely not displayed.
     local parent = group_entry(vim.fn.keytrans(pending), mode)
     local whitelist = (parent and parent.strict and parent.declared) or nil
-    local function whitelisted(key)
-        for _, d in ipairs(whitelist or {}) do
-            if d == key or d:sub(1, #key) == key then
-                return true -- declared directly, or a declared deeper sequence starts here
-            end
+    -- Match on raw keystroke BOUNDARIES, not display-string prefixes: a declared `<F12>` must
+    -- not whitelist a `<F1>` continuation just because "<F12>" starts with "<F1>". Index the
+    -- FIRST raw keystroke of every declared sequence; a continuation is allowed iff its raw
+    -- keystroke is one of those (declared directly, or the head of a declared deeper sequence).
+    local whitelist_fks
+    if whitelist then
+        whitelist_fks = {}
+        for _, d in ipairs(whitelist) do
+            whitelist_fks[first_keystroke(vim.api.nvim_replace_termcodes(d, true, true, true))] = true
         end
-        return false
+    end
+    local function whitelisted(raw)
+        return whitelist_fks ~= nil and whitelist_fks[raw] == true
     end
     local by_use = config.sort_by_usage == true
     local res = {}
     for _, e in ipairs(out) do
         local full = vim.fn.keytrans(pending .. e.raw)
-        if not is_ignored(full) and (not whitelist or whitelisted(e.key)) then
+        if not is_ignored(full) and (not whitelist or whitelisted(e.raw)) then
             if by_use then
                 e._use = stats.get(mode, full)
             end
