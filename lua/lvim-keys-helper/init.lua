@@ -623,7 +623,7 @@ function enter(mode, pending)
     end
     -- capture the count / register so resolve() can replay them in front of the sequence
     local prefix = ""
-    if mode == "n" or mode == "x" then
+    if mode == "n" or mode == "x" or mode == "o" then
         local reg = vim.v.register
         local cb = vim.o.clipboard
         local defreg = (cb:find("unnamedplus") and "+") or (cb:find("unnamed") and "*") or '"'
@@ -633,6 +633,9 @@ function enter(mode, pending)
     end
     if vim.v.count > 0 then
         prefix = prefix .. vim.v.count
+    end
+    if mode == "o" and vim.v.operator and vim.v.operator ~= "" then
+        prefix = prefix .. vim.v.operator
     end
     active = true
     local ok_run, err = pcall(run_loop, mode, pending, prefix)
@@ -856,7 +859,10 @@ function M.setup(opts)
     if ok_utils and utils.merge then
         utils.merge(config, opts or {})
     elseif opts then
-        config = vim.tbl_deep_extend("force", config, opts)
+        local merged = vim.tbl_deep_extend("force", config, opts)
+        for k, v in pairs(merged) do
+            config[k] = v
+        end
     end
     define_group_keys()
     keymaps.invalidate() -- config (groups/ignore/presets) may have changed
