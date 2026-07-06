@@ -24,6 +24,11 @@ and register are preserved**, and expr/callback mappings behave exactly as if ty
 - A prefix that is **also a complete mapping** never auto-runs while the panel is open:
   the legend shows it and `<CR>` runs it (Vim-style timeout resolution applies only
   before the panel shows, when `timeoutlen` < `delay`).
+- **Per-buffer opt-out** — a consumer that fully owns a buffer's keys can set
+  `vim.b.lvim_keys_helper_disable = true` on it; the helper then installs **no** triggers
+  in that buffer and removes any it already had (restoring shadowed maps). This is the
+  seam `lvim-utils.dock` uses so its buffer-local `<Leader>` owner is never shadowed by a
+  leader trigger. Clear the flag (`nil`) to resume normal behaviour.
 
 Everything that matters is switchable **live, without a restart**:
 

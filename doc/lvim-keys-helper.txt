@@ -26,6 +26,13 @@ A trigger that lands on a key with an existing buffer-local single-key
 mapping saves it and restores it when the trigger goes away; a global
 single-key mapping is never touched and runs via the ambiguity rule.
 
+Per-buffer opt-out: a consumer that fully owns a buffer's keys can set
+`vim.b.lvim_keys_helper_disable = true` on it — the helper then installs NO
+triggers there and removes any it already had (restoring shadowed maps). This
+is the public seam `lvim-utils.dock` uses so its buffer-local <Leader> owner is
+never shadowed by a leader trigger. Clear the flag (set it to nil) to resume
+normal behaviour.
+
 ==============================================================================
 2. SETUP                                        *lvim-keys-helper-setup*
 >lua

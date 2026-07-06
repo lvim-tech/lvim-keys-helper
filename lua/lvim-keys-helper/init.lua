@@ -24,6 +24,10 @@
 --   • panel style mini/full  → M.set_style("mini"|"full") / M.toggle_style()
 --   • group labels           → M.register_groups({ ["<leader>f"] = "Find" })
 --
+-- Per-buffer opt-out: a consumer that owns a buffer's keys sets `vim.b.lvim_keys_helper_disable
+-- = true` on it — the helper then installs NO triggers there and removes any it already had (the
+-- public seam the lvim-utils.dock uses so its buffer-local <Leader> owner is never shadowed).
+--
 ---@module "lvim-keys-helper"
 
 local config = require("lvim-keys-helper.config")
@@ -237,7 +241,32 @@ local function install_triggers()
         --     dashboards), whose rows bind single keys like r/u/d/b — a trigger would shadow them
         --     and pop the helper instead. (`nvim_create_buf(_, true)` makes these nofile, set at
         --     creation, before filetype/modifiable — so this is reliable and early.)
-        if bt == "prompt" or bt == "nofile" then
+        --   • terminal — the running program (a shell, or vifm / lazygit / htop launched by lvim-shell)
+        --     OWNS every key. In terminal-INSERT the app has the keys and a normal-mode trigger cannot fire
+        --     anyway; but installing one here would still add a stray buffer-local `<Leader>` in the terminal's
+        --     NORMAL mode (reached via `<C-\><C-n>`). A terminal is app-owned, so leave it ENTIRELY alone — no
+        --     per-consumer flag needed. (A docked lvim-term uses the lvim-utils.dock leader owner in
+        --     terminal-normal for park / cycle; an lvim-shell app-launcher wants zero maps.)
+        if bt == "prompt" or bt == "nofile" or bt == "terminal" then
+            return
+        end
+        -- Per-buffer opt-out: a buffer flagged `vim.b.lvim_keys_helper_disable` is owned
+        -- ENTIRELY by a consumer (e.g. the lvim-utils.dock leader owner parking a terminal),
+        -- so the helper must leave it alone. Unlike prompt/nofile (nofile from creation, so a
+        -- trigger was never installed), this flag can be set LATER — after triggers already
+        -- exist — so we REMOVE any we installed here (restoring shadowed maps) and forget the
+        -- buffer. remove_trigger only deletes a still-ours trigger (desc == TRIGGER_DESC), so a
+        -- `<Leader>` map the consumer already overwrote is never clobbered. This is the public
+        -- opt-out seam for docks / consumers that take over a buffer's keys.
+        if vim.b[buf].lvim_keys_helper_disable then
+            local list = installed[buf]
+            if list then
+                local idx = map_index(buf, list_modes(list))
+                for _, t in ipairs(list) do
+                    remove_trigger(buf, t, idx)
+                end
+                installed[buf] = nil
+            end
             return
         end
         -- desired[mode][lhs_human] = raw_fk

@@ -142,6 +142,13 @@ function M.check()
         health.info("disabled (enable with :LvimKeysHelper enable)")
     end
 
+    -- Per-buffer opt-out: a consumer (e.g. lvim-utils.dock) that fully owns a buffer's keys
+    -- sets vim.b.lvim_keys_helper_disable, so the helper installs no triggers there. Report it
+    -- when checkhealth runs from such a buffer — otherwise "no triggers here" looks like a bug.
+    if vim.b.lvim_keys_helper_disable then
+        health.info("current buffer opted out (vim.b.lvim_keys_helper_disable) — a consumer owns its keys")
+    end
+
     health.info(
         ("delay=%dms  style=%s  presets=%s  groups=%d  ignore=%d"):format(
             config.delay,
