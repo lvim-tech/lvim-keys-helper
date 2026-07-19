@@ -50,6 +50,9 @@ local function fit(s, w)
     if vim.fn.strdisplaywidth(s) <= w then
         return s
     end
+    if w <= 0 then
+        return "" -- no budget at all: emit nothing rather than a 1-cell ellipsis that overflows
+    end
     if w <= 1 then
         return "\xe2\x80\xa6"
     end

@@ -8,6 +8,7 @@
 local config = require("lvim-keys-helper.config")
 local keymaps = require("lvim-keys-helper.keymaps")
 local stats = require("lvim-keys-helper.stats")
+local presets = require("lvim-keys-helper.presets")
 
 local M = {}
 
@@ -72,6 +73,21 @@ end
 ---@return nil
 function M.doctor()
     local lines = { "# lvim-keys-helper doctor", "" }
+    -- Union of every mapping raw across ALL trigger modes (+ preset sequence raws when presets are on),
+    -- so the orphan-group check below is not fooled into flagging a group whose maps live only in
+    -- another mode, or that is backed by a preset sequence rather than a user map. Built once; orphans
+    -- are still REPORTED once (during the first trigger mode's pass).
+    local all_raws = {}
+    for _, m in ipairs(config.trigger_modes or { "n" }) do
+        for _, e in ipairs(maps_of(m)) do
+            all_raws[#all_raws + 1] = e.raw
+        end
+        if config.presets then
+            for _, p in ipairs(presets.for_mode(m)) do
+                all_raws[#all_raws + 1] = p.raw
+            end
+        end
+    end
     for _, mode in ipairs(config.trigger_modes or { "n" }) do
         local maps = maps_of(mode)
         local by_raw = {}
@@ -114,8 +130,8 @@ function M.doctor()
         for lhs in pairs(config.groups or {}) do
             local raw = vim.api.nvim_replace_termcodes(lhs, true, true, true)
             local found = false
-            for _, e in ipairs(maps) do
-                if e.raw:sub(1, #raw) == raw then
+            for _, r in ipairs(all_raws) do -- check the cross-mode + preset union, not just this mode's maps
+                if r:sub(1, #raw) == raw then
                     found = true
                     break
                 end

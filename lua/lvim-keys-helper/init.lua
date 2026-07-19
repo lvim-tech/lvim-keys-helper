@@ -662,7 +662,11 @@ local function run_loop(mode, first, prefix)
                     end
                 end
             else
-                break -- a click outside the panel closes it
+                -- A click outside the panel closes it AND should still land: replay the LeftMouse so
+                -- the same click focuses the window / places the cursor (getmousepos state is preserved
+                -- for the replayed event), instead of forcing the user to click a second time.
+                vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<LeftMouse>", true, false, true), "n", false)
+                break
             end
         elseif disp:find("Mouse") or disp:find("Scroll") or disp:find("Drag") or disp:find("Release") then
             log("  ignore mouse " .. disp)
