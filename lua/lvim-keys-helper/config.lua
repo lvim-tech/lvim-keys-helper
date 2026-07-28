@@ -65,7 +65,7 @@ return {
     --               b = "Blame", -- description override
     --               -- a table DEFINES a mapping, vim.keymap.set syntax: [1] = rhs
     --               -- (keys / <Cmd> string / function), rest = native opts
-    --               l = { "<Cmd>Telescope git_commits<CR>", desc = "Git Log" },
+    --               l = { "<Cmd>LvimGit log<CR>", desc = "Git Log" },
     --               o = { function() end, desc = "Open", mode = { "n", "x" } },
     --           },
     --       },

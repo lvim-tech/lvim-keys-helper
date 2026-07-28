@@ -1,4 +1,4 @@
-*lvim-keys-helper.txt*    A self-contained key-hint panel (which-key replacement)
+*lvim-keys-helper.txt*            A self-contained key-hint panel for Neovim
 
 ==============================================================================
 CONTENTS                                              *lvim-keys-helper*

@@ -1,10 +1,10 @@
 # lvim-keys-helper
 
-A self-contained key-hint panel for Neovim — a lightweight `which-key` replacement
-built on the lvim-tech ecosystem (uses `lvim-utils` for its palette/merge).
+A self-contained key-hint panel for Neovim, built on the lvim-tech ecosystem (uses
+`lvim-utils` for its palette/merge).
 
 Trigger keys are **auto-detected** per buffer: the first keystroke of every multi-key
-mapping (like which-key's `<auto>`) and, with presets on, of the built-in `g` / `z` /
+mapping and, with presets on, of the built-in `g` / `z` /
 `[` / `]` / `<C-w>` / text-object sequences. Triggers are buffer-local `<nowait>`
 mappings, so they fire **instantly** — the panel wait is `delay` alone — while
 `timeoutlen` itself is never touched: everything the helper does not intercept
@@ -52,30 +52,6 @@ Install and manage it from the LVIM package manager — open the **Plugins** tab
 ```
 
 lvim-installer installs plugins through Neovim's built-in `vim.pack`, so no external plugin manager is needed.
-
-### lazy.nvim
-
-```lua
-return {
-    "lvim-tech/lvim-keys-helper",
-    dependencies = { "lvim-tech/lvim-utils" },
-    config = function()
-        require("lvim-keys-helper").setup({})
-    end,
-}
-```
-
-### packer.nvim
-
-```lua
-use({
-    "lvim-tech/lvim-keys-helper",
-    requires = { "lvim-tech/lvim-utils" },
-    config = function()
-        require("lvim-keys-helper").setup({})
-    end,
-})
-```
 
 ### Native (vim.pack)
 
@@ -126,7 +102,7 @@ require("lvim-keys-helper").setup({
                 -- table: DEFINES a real mapping, vim.keymap.set syntax — [1] is the
                 -- rhs (keys / <Cmd> string / Lua function), the rest are the native
                 -- opts (desc, mode, expr, nowait, remap, silent, buffer, …)
-                l = { "<Cmd>Telescope git_commits<CR>", desc = "Git Log" },
+                l = { "<Cmd>LvimGit log<CR>", desc = "Git Log" },
                 o = {
                     function()
                         require("mod").open()
