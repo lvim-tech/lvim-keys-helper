@@ -375,7 +375,13 @@ function M.show(items, title, opts)
         return M.hide()
     end
     opts = opts or {}
-    local tkeys = type(title) == "table" and title or { title }
+    ---@type string[]
+    local tkeys
+    if type(title) == "table" then
+        tkeys = title
+    else
+        tkeys = { title }
+    end
     local tid = table.concat(tkeys, "\1")
     if tid ~= state.title then
         state.page = 1 -- a new (or narrowed) sequence starts back at the first page

@@ -332,11 +332,16 @@ local function queue_recompute()
     -- INSIDE their callback, so :stop()ing a superseded one would leak its handle until GC).
     -- Closed on VimLeavePre (see setup). A recompute that lands mid-sequence is deferred via
     -- pending_recompute and rerun at the end of enter(), never dropped.
-    if not recompute_timer then
-        recompute_timer = vim.uv.new_timer()
+    local timer = recompute_timer
+    if not timer then
+        timer = vim.uv.new_timer()
+        if not timer then
+            return -- libuv could not allocate a timer; there is nothing to debounce with
+        end
+        recompute_timer = timer
     end
-    recompute_timer:stop()
-    recompute_timer:start(
+    timer:stop()
+    timer:start(
         config.recompute_debounce or 120,
         0,
         vim.schedule_wrap(function()

@@ -148,11 +148,16 @@ function M.bump(mode, seq)
     -- so an actively-typed session still persists every 5s. A trailing debounce (restart on
     -- every bump) would defer the write indefinitely under steady use — only VimLeavePre would
     -- ever flush, and a crash would lose the whole session's counts.
-    if not save_timer then
-        save_timer = vim.uv.new_timer()
+    local timer = save_timer
+    if not timer then
+        timer = vim.uv.new_timer()
+        if not timer then
+            return -- libuv could not allocate a timer; the counts still flush on VimLeavePre
+        end
+        save_timer = timer
     end
-    if not save_timer:is_active() then
-        save_timer:start(5000, 0, vim.schedule_wrap(M.save))
+    if not timer:is_active() then
+        timer:start(5000, 0, vim.schedule_wrap(M.save))
     end
 end
 
