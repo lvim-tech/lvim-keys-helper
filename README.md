@@ -41,7 +41,7 @@ Everything that matters is switchable **live, without a restart**:
 
 ## Installation
 
-Requires Neovim >= 0.10 and [lvim-utils](https://github.com/lvim-tech/lvim-utils) (palette / merge helpers).
+Requires Neovim >= 0.12 and [lvim-utils](https://github.com/lvim-tech/lvim-utils) (palette / merge helpers).
 
 ### lvim-installer (recommended)
 

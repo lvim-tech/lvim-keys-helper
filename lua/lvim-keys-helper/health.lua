@@ -103,10 +103,10 @@ function M.check()
     local health = vim.health
     health.start("lvim-keys-helper")
 
-    if vim.fn.has("nvim-0.10") == 1 then
-        health.ok("Neovim >= 0.10")
+    if vim.fn.has("nvim-0.12") == 1 then
+        health.ok("Neovim >= 0.12")
     else
-        health.error("Neovim >= 0.10 is required (vim.uv, keytrans, extmark end_col)")
+        health.error("Neovim >= 0.12 is required (the lvim-tech set targets 0.12; lvim-utils requires it)")
     end
 
     local ok_utils = pcall(require, "lvim-utils.utils")
