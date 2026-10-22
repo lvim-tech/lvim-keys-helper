@@ -137,6 +137,10 @@ function M.bump(mode, seq)
         -- Final flush AND handle cleanup on exit: without close() the debounce timer would
         -- leak one libuv handle for the rest of the session (it is created once and reused).
         vim.api.nvim_create_autocmd("VimLeavePre", {
+            -- Own group: the `hooked` flag keeps this to one handler per session, but a module
+            -- reload resets the flag and would stack a second flush. The group makes the
+            -- registration replace rather than add.
+            group = vim.api.nvim_create_augroup("LvimKeysHelperStatsFlush", { clear = true }),
             callback = function()
                 M.save()
                 close_timer()
