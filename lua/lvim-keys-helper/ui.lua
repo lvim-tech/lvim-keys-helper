@@ -65,6 +65,23 @@ local function fit(s, w)
     return "\xe2\x80\xa6"
 end
 
+--- A UI glyph as lvim-icons shows it: in "material" mode its 2-cell image + the group to paint those cells
+--- with (the image id as fg on `group`'s background); otherwise the glyph unchanged and nil.
+---@param icon string
+---@param group string
+---@return string text, string? img_hl
+local function icon_cells(icon, group)
+    local ok, iconlib = pcall(require, "lvim-utils.icons")
+    if not (ok and iconlib.ui_text) or icon == "" then
+        return icon, nil
+    end
+    local t, h, img = iconlib.ui_text(icon, group)
+    if not img then
+        return icon, nil
+    end
+    return t, iconlib.on_bg({ image = true, hl = h }, group) or h
+end
+
 --- The palette slot (1..#palette) for a colour name; `fallback` when unknown.
 ---@param color string|nil
 ---@param fallback integer
@@ -111,11 +128,25 @@ local function layout(items, avail, page, fill, panel_slot, group_slot)
         local desc = (it.group and it.desc == "") and "+prefix" or it.desc
         -- plain keys carry the panel's level colour; group rows the NEXT level's colour
         -- (the level they open); a group with an assigned colour overrides either
+        local slot = slot_of(it.color, it.group and group_slot or panel_slot)
+        -- The group glyph as an image ("material" mode): the badge keeps the font text in `key_font` for when
+        -- it has to be truncated (cutting an image's cells apart would leave garbage), and `icon` = the image
+        -- cells' byte length + group, painted above the badge's own fg.
+        local key_font, icon
+        if it.group then
+            local t, img_hl = icon_cells(group_icon, "LvimKeysHelperBadge" .. slot)
+            if img_hl then
+                key_font, key = key, it.key .. " " .. t
+                icon = { #t, img_hl }
+            end
+        end
         cells[i] = {
             key = key,
+            key_font = key_font,
+            icon = icon,
             desc = desc,
             group = it.group,
-            slot = slot_of(it.color, it.group and group_slot or panel_slot),
+            slot = slot,
         }
         key_w = math.max(key_w, vim.fn.strdisplaywidth(key))
         desc_w = math.max(desc_w, vim.fn.strdisplaywidth(desc))
@@ -166,12 +197,18 @@ local function layout(items, avail, page, fill, panel_slot, group_slot)
                     line = line .. string.rep(" ", gap)
                 end
                 -- badge: ` key ` padded to key_w
-                local key = fit(cell.key, key_w)
+                local fits = vim.fn.strdisplaywidth(cell.key) <= key_w
+                local key = fit((fits or not cell.key_font) and cell.key or cell.key_font, key_w)
                 local kpad = string.rep(" ", key_w - vim.fn.strdisplaywidth(key))
                 local badge = " " .. key .. kpad .. " "
                 local b0 = #line
                 line = line .. badge
                 hls[#hls + 1] = { r - 1, b0, #line, "LvimKeysHelperBadge" .. cell.slot }
+                if cell.icon and fits then
+                    -- the image cells close the key text: their own group, above the badge's
+                    local i0 = b0 + 1 + #key - cell.icon[1]
+                    hls[#hls + 1] = { r - 1, i0, i0 + cell.icon[1], cell.icon[2], 4097 }
+                end
                 -- desc: ` desc ` padded to desc_w (group rows use the italic Group accent)
                 local desc = fit(cell.desc, desc_w)
                 local dpad = string.rep(" ", desc_w - vim.fn.strdisplaywidth(desc) + (pad_extra[c] or 0))
@@ -322,6 +359,7 @@ local function render()
         pcall(vim.api.nvim_buf_set_extmark, state.buf, NS, h[1], h[2], {
             end_col = h[3],
             hl_group = h[4],
+            priority = h[5],
         })
     end
 
