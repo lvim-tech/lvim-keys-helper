@@ -171,7 +171,7 @@ require("lvim-keys-helper").setup({
     },
     icons = {
         group = "", -- appended to group keys
-        breadcrumb = "➤", -- between the title cells
+        breadcrumb = "󰅂", -- between the title cells
     },
     recompute_debounce = 120, -- ms the buffer-change trigger recompute is debounced
 })
